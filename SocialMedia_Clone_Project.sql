@@ -65,6 +65,14 @@ select username, user_id, likescount from Count_of_userlikes
 where likescount = (select count(*) from photos);
 ---------------------------------------------------------------------------------------------------------------------
 
+/* Find users who have never commented on a photo */
+
+select users.username, comments.comment_text from users
+left outer join comments
+on users.ID = comments.user_id
+where comments.comment_text is null;
+---------------------------------------------------------------------------------------------------------------------
+
 /* what is the number of followers per users */
 
 select u.username, f.followee_id, count(f.follower_id) as followers_Count from `follows` f
@@ -125,22 +133,18 @@ from tblfinal;
 */
 with maintable as(
 	with Photo_Comments as ( select u.id, u.username, p.image_url, 
-								c.photo_id, count(c.comment_text) as commentscount
-								from photos p
-									left outer join comments c on p.id = c.photo_id
-									inner join users u on p.user_id = u.id
-								group by p.id
-							),
-			Photo_likes as 	( select photo_id as photid_tbllikes, count(user_id) as likescount from  likes
-								group by photo_id
-							),
+					c.photo_id, count(c.comment_text) as commentscount
+					from photos p
+					left outer join comments c on p.id = c.photo_id
+					inner join users u on p.user_id = u.id
+					group by p.id),
+		Photo_likes as 	( select photo_id as photid_tbllikes, count(user_id) as likescount from  likes
+					group by photo_id),
 		Photo_tags_tbl as 	( select photo_id as photoid_tblpt, group_concat(tag_id) as Tags_used_per_photo
-								from photo_tags
-								group by photo_id
-							),
+					from photo_tags
+					group by photo_id),
 		followers_tbl as 	( select followee_id, count(follower_id) as followercount from `follows` 
-								group by followee_id
-							)
+					group by followee_id)
     select * from Photo_Comments
     left outer join Photo_likes on Photo_Comments.photo_id = Photo_likes.photid_tbllikes
     left outer join followers_tbl on Photo_Comments.id = followers_tbl.followee_id
@@ -148,8 +152,8 @@ with maintable as(
 )
 select
 	id as user_id, username, photo_id,commentscount,likescount,tags_used_per_photo,followercount,
-    Case when tags_used_per_photo like 
-				concat('%',(select tag_id as Populartag from photo_tags group by tag_id order by count(tag_id) desc limit 1),'%')
+    	Case when tags_used_per_photo like 
+		concat('%',(select tag_id as Populartag from photo_tags group by tag_id order by count(tag_id) desc limit 1),'%')
 		then 'Used'
         else 'Not used'
         end as Most_Popolar_tag
@@ -165,12 +169,12 @@ select
 
 /* Find the tags which attract maximum likes. */
 
-with maintbl as
-	(	select pt.*, tbllikes.likescount from photo_tags pt
+with maintbl as(
+		select pt.*, tbllikes.likescount from photo_tags pt
 		left outer join
 		(select photo_id, count(user_id) as likescount from likes group by photo_id order by likescount desc) as tblLikes
 		on pt.photo_id = tbllikes.photo_id
-    )
+)
 select tag_id, count(tag_id) as usage_count 
 from maintbl
 where likescount between
@@ -185,14 +189,14 @@ group by tag_id order by usage_count desc;
 
 select distinct(follower_id) from follows;
 
-with final as
+with Maintbl as
 (
 	with tbluser_status as
 	(
 		select u.id, 
-				case when p.user_id then 1 else 0 end as posted,
-				case when l.user_id then 1 else 0 end as liked,
-				case when c.user_id then 1 else 0 end as commented
+			case when p.user_id then 1 else 0 end as posted,
+			case when l.user_id then 1 else 0 end as liked,
+			case when c.user_id then 1 else 0 end as commented
 		from users u
 		left outer join photos p on u.id = p.user_id
 		left outer join likes l on u.id = l.user_id
@@ -207,8 +211,8 @@ with final as
 )
 select followee_id,
 		(sum(follower_activity)/count(follower_activity))*100 as Active_users_percentage,
-        ((count(follower_activity) - sum(follower_activity))/count(follower_activity))*100 as inactive_users_percentage
-from final
+       		 ((count(follower_activity) - sum(follower_activity))/count(follower_activity))*100 as inactive_users_percentage
+from Maintbl
 group by followee_id
 ;
 
@@ -222,13 +226,11 @@ Select Photo_id, user_Id, count(user_id) -- over(partition by photo_id),
  group by Photo_id, user_id
  order by 1 asc, 3 Desc;
  
-/* select * from comments where photo_id = 1 and user_id = 2;
-update comments set user_id = 3 where photo_id = 1 and id = 2; */
 ---------------------------------------------------------------------------------------------------------------------
 
 /* Do all the followers like all the photos of followee? - are they bots or not? */
 -- Private accounts (No. of followers = no. of likes per post, then Yes, otherwise No)
--- Public accounts (followers Ids and liked_user ids needs to be compared to conclude.
+-- Public accounts (followers Ids and liked_user ids needs to be compared to conclude).
 
 /* Assuming All user accounts are  Private accounts*/
 select p.id, p.user_id as posted_User,
@@ -241,12 +243,4 @@ left outer join
 		(select followee_id as User_id, count(follower_id) as followers from `follows` group by followee_id) as f
 on p.user_id = f.user_id
 group by p.id;
-
-/* Assuming Users accounts are Public accounts - This code also works for private accounts, however this is complex */
-select p.id, p.user_id as posted_User,
-		l.photo_id, l.user_id as liked_user,
-		f.*
-from likes l
-left outer join photos p on l.photo_id = p.id
-left outer join `follows` f on p.user_id = f.followee_id
 
